@@ -183,5 +183,26 @@ class TestFastAPIEndpoints(unittest.TestCase):
             cleanup_files(dummy_upload_file)
 
 
+class TestLuhnRecognizer(unittest.TestCase):
+    def test_luhn_validation(self):
+        from config import is_luhn_valid
+        # Valid test card number passing Luhn
+        self.assertTrue(is_luhn_valid("4444333322221111"))
+        # Invalid number (fails Luhn)
+        self.assertFalse(is_luhn_valid("4444333322221112"))
+
+    def test_luhn_recognizer_detection(self):
+        from config import LuhnCreditCardRecognizer
+        recognizer = LuhnCreditCardRecognizer()
+        
+        # Test detection with spaces and hyphens
+        text = "My card number is 4444 3333 2222 1111 and my backup is 4444-3333-2222-1111."
+        results = recognizer.analyze(text, entities=["CREDIT_CARD"])
+        self.assertEqual(len(results), 2)
+        
+        self.assertEqual(results[0].entity_type, "CREDIT_CARD")
+        self.assertEqual(results[1].entity_type, "CREDIT_CARD")
+
+
 if __name__ == "__main__":
     unittest.main()
