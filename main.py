@@ -1,11 +1,13 @@
+import asyncio
 import logging
 import os
 import shutil
 import tempfile
 import uuid
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
-from pipeline import run_redaction_pipeline
+from pipeline import run_redaction_pipeline, get_whisper_model
 from audio_utils import bleep_audio
 
 # Setup logging
@@ -15,10 +17,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan events for the FastAPI application.
+    Eagerly loads the Whisper model on startup to avoid lazy-loading concurrency issues.
+    """
+    logger.info("Starting up Redactify API. Eagerly loading Whisper model...")
+    try:
+        # Load the Whisper model eagerly in a thread pool to avoid blocking the event loop
+        await asyncio.to_thread(get_whisper_model)
+    except Exception as e:
+        logger.error(f"Failed to eagerly load Whisper model on startup: {e}")
+    yield
+    logger.info("Shutting down Redactify API...")
+
 app = FastAPI(
     title="Redactify API",
     description="FastAPI application to redact/bleep PII from audio files using faster-whisper, microsoft-presidio, and ffmpeg.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 def cleanup_files(*filepaths: str):

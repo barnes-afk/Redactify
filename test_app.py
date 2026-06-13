@@ -313,5 +313,18 @@ class TestWhisperConfiguration(unittest.TestCase):
             pipeline._whisper_model = old_model
 
 
+class TestAppLifespan(unittest.TestCase):
+    @patch("main.get_whisper_model")
+    def test_lifespan_eagerly_loads_whisper_model(self, mock_get_whisper_model):
+        """
+        Verify that using TestClient as a context manager triggers the lifespan startup
+        which eagerly loads the Whisper model.
+        """
+        with TestClient(app) as client:
+            pass
+        # Assert that get_whisper_model was called during the lifespan startup
+        mock_get_whisper_model.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
