@@ -6,6 +6,14 @@ from presidio_analyzer.nlp_engine import NlpEngineProvider
 # Whisper model size setup (default is 'base')
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
 
+# Whisper device setup (default is 'cpu', can be 'cuda' for GPU execution)
+WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
+
+# Whisper compute type (default is 'int8' for cpu, and 'float16' for cuda if not provided)
+WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE")
+if not WHISPER_COMPUTE_TYPE:
+    WHISPER_COMPUTE_TYPE = "float16" if WHISPER_DEVICE == "cuda" else "int8"
+
 # Setup Presidio NLP engine with a lightweight model 'en_core_web_sm'
 NLP_CONFIG = {
     "nlp_engine_name": "spacy",

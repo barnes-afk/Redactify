@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import List, Tuple
 from faster_whisper import WhisperModel
-from config import WHISPER_MODEL_SIZE, analyzer_engine
+from config import WHISPER_MODEL_SIZE, WHISPER_DEVICE, WHISPER_COMPUTE_TYPE, analyzer_engine
 
 logger = logging.getLogger(__name__)
 
@@ -12,22 +12,35 @@ _whisper_model = None
 def get_whisper_model() -> WhisperModel:
     """
     Lazy loader for the WhisperModel singleton.
-    Loads the model on CPU with int8 quantization for optimal speed and resource usage.
+    Loads the model on the configured device (e.g. CPU or CUDA/GPU) with the optimal compute type.
     """
     global _whisper_model
     if _whisper_model is None:
-        logger.info(f"Loading Whisper model '{WHISPER_MODEL_SIZE}' on CPU (int8)...")
-        _whisper_model = WhisperModel(WHISPER_MODEL_SIZE, device="cpu", compute_type="int8")
+        logger.info(f"Loading Whisper model '{WHISPER_MODEL_SIZE}' on {WHISPER_DEVICE} ({WHISPER_COMPUTE_TYPE})...")
+        _whisper_model = WhisperModel(
+            WHISPER_MODEL_SIZE,
+            device=WHISPER_DEVICE,
+            compute_type=WHISPER_COMPUTE_TYPE
+        )
         logger.info("Whisper model loaded successfully.")
     return _whisper_model
 
 def _transcribe_blocking(audio_path: str) -> Tuple[List, any]:
     """
     Synchronous blocking helper to transcribe and fully consume the segments generator.
+    Uses highly optimized defaults (beam_size=1, temperature=0.0, language='en', vad_filter=True)
+    for maximum processing speed.
     """
     model = get_whisper_model()
     # Request word timestamps for precise bleep segment identification
-    segments_gen, info = model.transcribe(audio_path, word_timestamps=True)
+    segments_gen, info = model.transcribe(
+        audio_path,
+        word_timestamps=True,
+        beam_size=1,
+        temperature=0.0,
+        language="en",
+        vad_filter=True
+    )
     segments_list = list(segments_gen)
     return segments_list, info
 

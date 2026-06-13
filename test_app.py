@@ -238,5 +238,28 @@ class TestLuhnRecognizer(unittest.TestCase):
         self.assertEqual(results[1].entity_type, "CREDIT_CARD")
 
 
+class TestWhisperConfiguration(unittest.TestCase):
+    @patch("pipeline.WhisperModel")
+    def test_get_whisper_model_configuration(self, mock_whisper_model_class):
+        import pipeline
+        # Save old cache and force reset
+        old_model = pipeline._whisper_model
+        pipeline._whisper_model = None
+        
+        try:
+            # Load model
+            pipeline.get_whisper_model()
+            
+            # Assert that WhisperModel was instantiated with configured values
+            mock_whisper_model_class.assert_called_once_with(
+                pipeline.WHISPER_MODEL_SIZE,
+                device=pipeline.WHISPER_DEVICE,
+                compute_type=pipeline.WHISPER_COMPUTE_TYPE
+            )
+        finally:
+            # Restore cache
+            pipeline._whisper_model = old_model
+
+
 if __name__ == "__main__":
     unittest.main()

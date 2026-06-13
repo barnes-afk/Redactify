@@ -90,17 +90,37 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ### Configuration Options (Environment Variables)
-You can configure the size of the Whisper model loaded in memory by setting the `WHISPER_MODEL_SIZE` environment variable (defaults to `base`):
-* `tiny` (Fastest, lowest memory, ~70MB)
-* `base` (Default, balanced, ~140MB)
-* `small` (High accuracy, ~460MB)
-* `medium` (Very high accuracy, ~1.5GB)
+You can customize Redactify's performance, resource usage, and hardware acceleration using the following environment variables:
 
-Example of starting with a smaller model:
-```bash
-export WHISPER_MODEL_SIZE="tiny"
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
+1. **`WHISPER_MODEL_SIZE`**: Specifies the size of the OpenAI Whisper model loaded into memory (defaults to `base`):
+   * `tiny` (Fastest, lowest memory usage, ~70MB)
+   * `base` (Default, balanced speed/accuracy, ~140MB)
+   * `small` (High accuracy, ~460MB)
+   * `medium` (Very high accuracy, ~1.5GB)
+
+2. **`WHISPER_DEVICE`**: Specifies the hardware device on which to execute the model (defaults to `cpu`):
+   * `cpu` (Default, runs on system CPU)
+   * `cuda` (Runs on Nvidia GPU using CUDA for maximum throughput)
+
+3. **`WHISPER_COMPUTE_TYPE`**: Specifies the mathematical quantization/precision type. By default, it automatically selects the most optimal option:
+   * **On CPU:** Defaults to `int8` (quantized 8-bit integers, reducing CPU load and RAM usage).
+   * **On GPU (`cuda`):** Defaults to `float16` (native half-precision, taking advantage of GPU tensor cores). Can also be configured to `int8_float16` to save VRAM.
+
+#### Execution Examples:
+
+* **Example A: High-Efficiency CPU execution with the small model (default quant `int8`)**
+  ```bash
+  export WHISPER_MODEL_SIZE="small"
+  export WHISPER_DEVICE="cpu"
+  uvicorn main:app --host 0.0.0.0 --port 8000
+  ```
+
+* **Example B: Ultra-Fast GPU execution with the base model**
+  ```bash
+  export WHISPER_DEVICE="cuda"
+  export WHISPER_COMPUTE_TYPE="float16"
+  uvicorn main:app --host 0.0.0.0 --port 8000
+  ```
 
 ---
 
