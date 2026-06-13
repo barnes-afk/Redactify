@@ -53,8 +53,8 @@ class LuhnCreditCardRecognizer(EntityRecognizer):
             supported_entities=["CREDIT_CARD"],
             supported_language="en"
         )
-        # Matches 13 to 19 digits possibly separated by spaces or hyphens
-        self.pattern = re.compile(r'\b(?:\d[\s-]*){13,19}\b')
+        # Matches 13 to 19 digits possibly separated by spaces, hyphens, commas, or periods
+        self.pattern = re.compile(r'\b(?:\d[\s,.-]*){13,19}\b')
 
     def analyze(self, text, entities, nlp_artifacts=None):
         results = []

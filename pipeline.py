@@ -125,9 +125,14 @@ async def run_redaction_pipeline(audio_path: str, full_redact: bool = False) -> 
         )
         
         # Find all words/segments that overlap with this PII character range
-        for w in word_mappings:
-            # Overlap exists if word start is before PII end AND word end is after PII start
-            if w["start_char"] < result.end and w["end_char"] > result.start:
-                bleep_segments.append((w["start_time"], w["end_time"]))
+        overlapping_words = [
+            w for w in word_mappings
+            if w["start_char"] < result.end and w["end_char"] > result.start
+        ]
+        
+        if overlapping_words:
+            start_time = min(w["start_time"] for w in overlapping_words)
+            end_time = max(w["end_time"] for w in overlapping_words)
+            bleep_segments.append((start_time, end_time))
 
     return bleep_segments

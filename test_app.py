@@ -173,6 +173,48 @@ class TestPipelineMapping(unittest.IsolatedAsyncioTestCase):
             entities=["CREDIT_CARD"]
         )
 
+    @patch("pipeline.get_whisper_model")
+    @patch("pipeline.analyzer_engine")
+    async def test_run_redaction_pipeline_continuous_bleeping(self, mock_analyzer, mock_get_whisper):
+        # Setup mock Whisper segment and multiple words
+        mock_word_1 = MagicMock()
+        mock_word_1.word = " 1,"
+        mock_word_1.start = 1.0
+        mock_word_1.end = 1.5
+
+        mock_word_2 = MagicMock()
+        mock_word_2.word = " 2,"
+        mock_word_2.start = 1.6
+        mock_word_2.end = 2.1
+
+        mock_word_3 = MagicMock()
+        mock_word_3.word = " 3."
+        mock_word_3.start = 2.2
+        mock_word_3.end = 2.7
+
+        mock_segment = MagicMock()
+        mock_segment.words = [mock_word_1, mock_word_2, mock_word_3]
+        mock_segment.text = " 1, 2, 3."
+
+        mock_whisper = MagicMock()
+        mock_whisper.transcribe.return_value = ([mock_segment], None)
+        mock_get_whisper.return_value = mock_whisper
+
+        # Setup mock Presidio Analyzer response
+        mock_pii_result = MagicMock()
+        mock_pii_result.entity_type = "CREDIT_CARD"
+        mock_pii_result.start = 1  # Matches "1, 2, 3."
+        mock_pii_result.end = 9
+        mock_pii_result.score = 0.95
+
+        mock_analyzer.analyze.return_value = [mock_pii_result]
+
+        # Run pipeline
+        bleep_segments = await run_redaction_pipeline("dummy_audio.wav")
+
+        # We expect a single continuous interval covering all matched words
+        self.assertEqual(bleep_segments, [(1.0, 2.7)])
+
 
 class TestFastAPIEndpoints(unittest.TestCase):
     def setUp(self):
@@ -236,6 +278,16 @@ class TestLuhnRecognizer(unittest.TestCase):
         
         self.assertEqual(results[0].entity_type, "CREDIT_CARD")
         self.assertEqual(results[1].entity_type, "CREDIT_CARD")
+
+    def test_luhn_recognizer_detection_commas_and_periods(self):
+        from config import LuhnCreditCardRecognizer
+        recognizer = LuhnCreditCardRecognizer()
+        
+        # Test detection with spaces, commas, and periods
+        text = "My card number is 4, 4, 4, 4. 3, 3, 3, 3. 2, 2, 2, 2. 1, 1, 1, 1."
+        results = recognizer.analyze(text, entities=["CREDIT_CARD"])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].entity_type, "CREDIT_CARD")
 
 
 class TestWhisperConfiguration(unittest.TestCase):
