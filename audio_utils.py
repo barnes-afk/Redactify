@@ -55,12 +55,12 @@ async def bleep_audio(
         pii_expr = " + ".join(pii_expr_parts)
         
         # Original audio stream: volume is 0 during PII, 1 otherwise
-        # Sine wave stream: generated at 1000Hz, volume is 1 during PII, 0 otherwise
+        # Sine wave stream: generated at 1000Hz, volume is 0.15 during PII, 0 otherwise (0.15 is pleasant and not too loud)
         # amix: mixes the original stream and sine wave stream, terminating when original finishes (duration=first)
         filter_complex = (
             f"[0:a]volume=eval=frame:volume='if({pii_expr},0,1)'[muted_orig];"
             f"sine=f=1000:r=44100[sine_gen];"
-            f"[sine_gen]volume=eval=frame:volume='if({pii_expr},1,0)'[gated_sine];"
+            f"[sine_gen]volume=eval=frame:volume='if({pii_expr},0.15,0)'[gated_sine];"
             f"[muted_orig][gated_sine]amix=inputs=2:duration=first[out_a]"
         )
         

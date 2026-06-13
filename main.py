@@ -43,7 +43,8 @@ def health_check():
 @app.post("/redact-audio")
 async def redact_audio_endpoint(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    full_redact: bool = False
 ):
     """
     POST endpoint that accepts an audio file, transcribes it, detects PII,
@@ -77,7 +78,7 @@ async def redact_audio_endpoint(
     
     try:
         # Step 1, 2, 3: Run pipeline to identify PII and get bleep segments
-        bleep_segments = await run_redaction_pipeline(input_file_path)
+        bleep_segments = await run_redaction_pipeline(input_file_path, full_redact=full_redact)
         
         # Step 4: Run ffmpeg complex filter to bleep out segments
         await bleep_audio(input_file_path, output_file_path, bleep_segments)

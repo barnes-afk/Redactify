@@ -133,11 +133,45 @@ class TestPipelineMapping(unittest.IsolatedAsyncioTestCase):
 
         mock_analyzer.analyze.return_value = [mock_pii_result]
 
-        # Run pipeline
-        bleep_segments = await run_redaction_pipeline("dummy_audio.wav")
+        # Run pipeline with full_redact=True to allow non-credit-card PII (PHONE_NUMBER)
+        bleep_segments = await run_redaction_pipeline("dummy_audio.wav", full_redact=True)
 
         # We expect only the word " 555-0199." to be bleeped, which has timestamps [1.4, 2.4]
         self.assertEqual(bleep_segments, [(1.4, 2.4)])
+        mock_analyzer.analyze.assert_called_once_with(
+            text=" Hello, my phone is 555-0199.",
+            language="en",
+            entities=None
+        )
+
+    @patch("pipeline.get_whisper_model")
+    @patch("pipeline.analyzer_engine")
+    async def test_run_redaction_pipeline_default_only_credit_card(self, mock_analyzer, mock_get_whisper):
+        # Setup mock Whisper segment and words
+        mock_word = MagicMock()
+        mock_word.word = " 4444333322221111"
+        mock_word.start = 0.0
+        mock_word.end = 1.0
+
+        mock_segment = MagicMock()
+        mock_segment.words = [mock_word]
+        mock_segment.text = " 4444333322221111"
+
+        mock_whisper = MagicMock()
+        mock_whisper.transcribe.return_value = ([mock_segment], None)
+        mock_get_whisper.return_value = mock_whisper
+
+        mock_analyzer.analyze.return_value = []
+
+        # Run pipeline with default options (full_redact=False)
+        await run_redaction_pipeline("dummy_audio.wav")
+
+        # Verify that Presidio was called requesting ONLY "CREDIT_CARD" entities
+        mock_analyzer.analyze.assert_called_once_with(
+            text=" 4444333322221111",
+            language="en",
+            entities=["CREDIT_CARD"]
+        )
 
 
 class TestFastAPIEndpoints(unittest.TestCase):

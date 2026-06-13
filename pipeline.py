@@ -31,11 +31,13 @@ def _transcribe_blocking(audio_path: str) -> Tuple[List, any]:
     segments_list = list(segments_gen)
     return segments_list, info
 
-async def run_redaction_pipeline(audio_path: str) -> List[Tuple[float, float]]:
+async def run_redaction_pipeline(audio_path: str, full_redact: bool = False) -> List[Tuple[float, float]]:
     """
     Executes the core redaction pipeline:
     1. Transcribes audio preserving word-level timestamps.
     2. Runs Presidio Analyzer on the transcribed text to find PII character indices.
+       - If full_redact is False (default), only looks for CREDIT_CARD entities.
+       - If full_redact is True, looks for all supported PII entities.
     3. Maps character indices back to exact audio timestamps.
     Returns a list of (start_time, end_time) tuples representing the bleep intervals.
     """
@@ -88,12 +90,14 @@ async def run_redaction_pipeline(audio_path: str) -> List[Tuple[float, float]]:
         return []
 
     # Run Presidio Analyzer (offloaded to thread pool to keep the event loop responsive)
-    logger.info("Running Presidio Analyzer to identify PII...")
+    logger.info(f"Running Presidio Analyzer (full_redact={full_redact}) to identify PII...")
+    entities = None if full_redact else ["CREDIT_CARD"]
     try:
         results = await asyncio.to_thread(
             analyzer_engine.analyze,
             text=full_text,
-            language="en"
+            language="en",
+            entities=entities
         )
     except Exception as e:
         logger.error(f"Error during Presidio analysis: {e}")
