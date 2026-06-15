@@ -42,10 +42,53 @@ def is_luhn_valid(number_str: str) -> bool:
         total_sum += (double_d - 9) if double_d > 9 else double_d
     return (total_sum % 10) == 0
 
+SINGLE_DIGIT_WORDS = {
+    "zero": "0", "oh": "0", "nought": "0", "nil": "0", "none": "0",
+    "one": "1",
+    "two": "2", "to": "2", "too": "2",
+    "three": "3",
+    "four": "4", "for": "4", "fore": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8", "ate": "8",
+    "nine": "9"
+}
+
+TEENS_WORDS = {
+    "ten": "10",
+    "eleven": "11",
+    "twelve": "12",
+    "thirteen": "13",
+    "fourteen": "14",
+    "fifteen": "15",
+    "sixteen": "16",
+    "seventeen": "17",
+    "eighteen": "18",
+    "nineteen": "19"
+}
+
+TENS_WORDS = {
+    "twenty": "2",
+    "thirty": "3",
+    "forty": "4",
+    "fifty": "5",
+    "sixty": "6",
+    "seventy": "7",
+    "eighty": "8",
+    "ninety": "9"
+}
+
+MULTIPLIERS = {
+    "double": 2,
+    "triple": 3
+}
+
 class LuhnCreditCardRecognizer(EntityRecognizer):
     """
     Custom Presidio recognizer that detects credit card numbers
-    by scanning for 13-19 digit patterns (possibly separated by spaces/hyphens)
+    by scanning for 13-19 digit patterns (possibly represented as word numbers or digits,
+    and possibly separated by spaces, hyphens, commas, periods, or other words)
     and validating them using the Luhn algorithm.
     """
     def __init__(self):
@@ -53,8 +96,6 @@ class LuhnCreditCardRecognizer(EntityRecognizer):
             supported_entities=["CREDIT_CARD"],
             supported_language="en"
         )
-        # Matches 13 to 19 digits possibly separated by spaces, hyphens, commas, or periods
-        self.pattern = re.compile(r'\b(?:\d[\s,.-]*){13,19}\b')
 
     def analyze(self, text, entities, nlp_artifacts=None):
         results = []
@@ -62,18 +103,167 @@ class LuhnCreditCardRecognizer(EntityRecognizer):
         if entities and "CREDIT_CARD" not in entities:
             return results
 
-        for match in self.pattern.finditer(text):
-            candidate = match.group(0)
-            # Filter candidate down to only digits
-            cleaned = "".join(c for c in candidate if c.isdigit())
-            if 13 <= len(cleaned) <= 19 and is_luhn_valid(cleaned):
-                result = RecognizerResult(
+        # 1. Tokenize text into alphanumeric word tokens
+        tokens = []
+        for m in re.finditer(r'\b\w+\b', text):
+            word = m.group(0)
+            tokens.append({
+                "word": word,
+                "lower": word.lower(),
+                "start": m.start(),
+                "end": m.end()
+            })
+
+        # 2. Extract digit tokens and map them to their digit string representations
+        digit_items = []
+        i = 0
+        n = len(tokens)
+        while i < n:
+            token = tokens[i]
+            word_lower = token["lower"]
+            
+            # Raw digit string
+            if word_lower.isdigit():
+                digit_items.append({
+                    "digit_str": word_lower,
+                    "start": token["start"],
+                    "end": token["end"],
+                    "token_idx": i
+                })
+                i += 1
+                continue
+                
+            # Multiplier (double/triple)
+            if word_lower in MULTIPLIERS:
+                mult = MULTIPLIERS[word_lower]
+                if i + 1 < n:
+                    next_token = tokens[i + 1]
+                    next_word = next_token["lower"]
+                    next_digit = None
+                    if next_word.isdigit():
+                        next_digit = next_word[0]
+                    elif next_word in SINGLE_DIGIT_WORDS:
+                        next_digit = SINGLE_DIGIT_WORDS[next_word]
+                        
+                    if next_digit is not None:
+                        digit_items.append({
+                            "digit_str": next_digit * mult,
+                            "start": token["start"],
+                            "end": next_token["end"],
+                            "token_idx": i + 1
+                        })
+                        i += 2
+                        continue
+                        
+            # Single digit words
+            if word_lower in SINGLE_DIGIT_WORDS:
+                digit_items.append({
+                    "digit_str": SINGLE_DIGIT_WORDS[word_lower],
+                    "start": token["start"],
+                    "end": token["end"],
+                    "token_idx": i
+                })
+                i += 1
+                continue
+                
+            # Teens words
+            if word_lower in TEENS_WORDS:
+                digit_items.append({
+                    "digit_str": TEENS_WORDS[word_lower],
+                    "start": token["start"],
+                    "end": token["end"],
+                    "token_idx": i
+                })
+                i += 1
+                continue
+                
+            # Tens words
+            if word_lower in TENS_WORDS:
+                tens_digit = TENS_WORDS[word_lower]
+                if i + 1 < n:
+                    next_token = tokens[i + 1]
+                    next_word = next_token["lower"]
+                    if next_word in SINGLE_DIGIT_WORDS:
+                        digit_str = tens_digit + SINGLE_DIGIT_WORDS[next_word]
+                        digit_items.append({
+                            "digit_str": digit_str,
+                            "start": token["start"],
+                            "end": next_token["end"],
+                            "token_idx": i + 1
+                        })
+                        i += 2
+                        continue
+                # Otherwise, it's just the tens word by itself (e.g., "forty" -> "40")
+                digit_items.append({
+                    "digit_str": tens_digit + "0",
+                    "start": token["start"],
+                    "end": token["end"],
+                    "token_idx": i
+                })
+                i += 1
+                continue
+                
+            i += 1
+
+        # 3. Group digit items that are "close" to each other
+        MAX_GAP_TOKENS = 3
+        candidate_groups = []
+        current_group = []
+        
+        for item in digit_items:
+            if not current_group:
+                current_group.append(item)
+            else:
+                last_item = current_group[-1]
+                gap = item["token_idx"] - last_item["token_idx"] - 1
+                if gap <= MAX_GAP_TOKENS:
+                    current_group.append(item)
+                else:
+                    candidate_groups.append(current_group)
+                    current_group = [item]
+        if current_group:
+            candidate_groups.append(current_group)
+
+        # 4. Find all Luhn-valid sub-segments within each group
+        detected_ranges = []
+        for group in candidate_groups:
+            # We look at all possible sub-segments of this group
+            for start_idx in range(len(group)):
+                for end_idx in range(start_idx + 1, len(group) + 1):
+                    sub_items = group[start_idx:end_idx]
+                    combined = "".join(item["digit_str"] for item in sub_items)
+                    if 13 <= len(combined) <= 19:
+                        if is_luhn_valid(combined):
+                            detected_ranges.append({
+                                "start": sub_items[0]["start"],
+                                "end": sub_items[-1]["end"]
+                            })
+
+        # 5. Merge any overlapping or adjacent detected character ranges
+        if not detected_ranges:
+            return results
+
+        sorted_ranges = sorted(detected_ranges, key=lambda r: r["start"])
+        merged_ranges = []
+        curr = sorted_ranges[0]
+        for nxt in sorted_ranges[1:]:
+            if nxt["start"] <= curr["end"]:
+                curr["end"] = max(curr["end"], nxt["end"])
+            else:
+                merged_ranges.append(curr)
+                curr = nxt
+        merged_ranges.append(curr)
+
+        # 6. Convert merged ranges to Presidio RecognizerResult objects
+        for r in merged_ranges:
+            results.append(
+                RecognizerResult(
                     entity_type="CREDIT_CARD",
-                    start=match.start(),
-                    end=match.end(),
+                    start=r["start"],
+                    end=r["end"],
                     score=0.95
                 )
-                results.append(result)
+            )
         return results
 
 # Initialize Presidio Analyzer Engine

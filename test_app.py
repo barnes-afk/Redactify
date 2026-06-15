@@ -289,6 +289,48 @@ class TestLuhnRecognizer(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].entity_type, "CREDIT_CARD")
 
+    def test_luhn_recognizer_detection_word_separated(self):
+        from config import LuhnCreditCardRecognizer
+        recognizer = LuhnCreditCardRecognizer()
+
+        # The user's exact transcription example
+        text = (
+            "All right, I wanted to give my credit card number. All right, go ahead. "
+            "All right, let's see here. One, two, three, four. Okay. Four, three, two, one. "
+            "Mm-hmm. One, two, three, four. Go ahead. Four, three, two, one. All right, perfect."
+        )
+        results = recognizer.analyze(text, entities=["CREDIT_CARD"])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].entity_type, "CREDIT_CARD")
+        # Ensure the matched range covers from the first digit word "One" to the last "one"
+        matched_text = text[results[0].start:results[0].end]
+        self.assertTrue(matched_text.startswith("One"))
+        self.assertTrue(matched_text.endswith("one"))
+
+    def test_luhn_recognizer_detection_multipliers(self):
+        from config import LuhnCreditCardRecognizer
+        recognizer = LuhnCreditCardRecognizer()
+
+        # Test "double" and "triple" word multipliers in a card number
+        text = "card is double four double four double three double three double two double two double one double one."
+        results = recognizer.analyze(text, entities=["CREDIT_CARD"])
+        self.assertEqual(len(results), 1)
+        matched_text = text[results[0].start:results[0].end]
+        self.assertTrue(matched_text.startswith("double"))
+        self.assertTrue(matched_text.endswith("one"))
+
+    def test_luhn_recognizer_detection_tens_and_teens(self):
+        from config import LuhnCreditCardRecognizer
+        recognizer = LuhnCreditCardRecognizer()
+
+        # Test "tens" and "teens" words
+        text = "card is forty-four forty-four thirty-three thirty-three twenty-two twenty-two eleven eleven"
+        results = recognizer.analyze(text, entities=["CREDIT_CARD"])
+        self.assertEqual(len(results), 1)
+        matched_text = text[results[0].start:results[0].end]
+        self.assertTrue(matched_text.startswith("forty"))
+        self.assertTrue(matched_text.endswith("eleven"))
+
 
 class TestWhisperConfiguration(unittest.TestCase):
     @patch("pipeline.WhisperModel")
