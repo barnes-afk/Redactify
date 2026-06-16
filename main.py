@@ -9,6 +9,7 @@ from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from pipeline import run_redaction_pipeline, get_whisper_model
 from audio_utils import bleep_audio
+from config import get_secure_temp_dir
 
 # Setup logging
 logging.basicConfig(
@@ -75,7 +76,7 @@ async def redact_audio_endpoint(
     if not ext:
         ext = ".wav"  # Default fallback if no extension is provided
         
-    temp_dir = tempfile.gettempdir()
+    temp_dir = get_secure_temp_dir()
     input_file_path = os.path.join(temp_dir, f"input_{uuid.uuid4()}{ext}")
     output_file_path = os.path.join(temp_dir, f"redacted_{uuid.uuid4()}{ext}")
     

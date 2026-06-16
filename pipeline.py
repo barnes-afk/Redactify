@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from typing import List, Tuple
 from faster_whisper import WhisperModel
-from config import WHISPER_MODEL_SIZE, WHISPER_DEVICE, WHISPER_COMPUTE_TYPE, analyzer_engine
+from config import WHISPER_MODEL_SIZE, WHISPER_DEVICE, WHISPER_COMPUTE_TYPE, analyzer_engine, get_secure_temp_dir
 from audio_utils import get_audio_channels, extract_mono_channel
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ async def run_redaction_pipeline(audio_path: str, full_redact: bool = False) -> 
 
     if channels == 2:
         logger.info("Stereo file detected. Extracting Left (Customer) channel for transcription...")
-        temp_dir = tempfile.gettempdir()
+        temp_dir = get_secure_temp_dir()
         temp_left_path = os.path.join(temp_dir, f"temp_left_{uuid.uuid4()}.wav")
         try:
             await extract_mono_channel(audio_path, temp_left_path, "left")

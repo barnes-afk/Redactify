@@ -26,6 +26,18 @@ NLP_CONFIG = {
 provider = NlpEngineProvider(nlp_configuration=NLP_CONFIG)
 nlp_engine = provider.create_engine()
 
+def get_secure_temp_dir() -> str:
+    """
+    Returns an in-memory temp directory (/dev/shm on Linux) for PCI-DSS compliance,
+    ensuring unredacted audio never touches non-volatile disk storage.
+    Falls back to standard tempfile.gettempdir() on non-Linux platforms.
+    """
+    shm_path = "/dev/shm"
+    if os.name == "posix" and os.path.exists(shm_path) and os.access(shm_path, os.W_OK):
+        return shm_path
+    import tempfile
+    return tempfile.gettempdir()
+
 def is_luhn_valid(number_str: str) -> bool:
     """
     Validates a credit card number using the Luhn algorithm (Mod 10).

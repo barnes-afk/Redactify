@@ -11,6 +11,12 @@ Redactify is a visually-silent, high-performance FastAPI application built to au
   * **Asynchronous Backtracking DFS Scan:** Recursively scans extracted digit sequences allowing conversational pauses of up to `15` tokens (e.g. *"Hold on, let me look at it"*), seamlessly skipping filler words or count adjectives (such as *"four"* in *"last four digits"*).
   * **Density-Quality Greedy Selection:** Greedily evaluates overlapping candidate subsequences, prioritizing candidates with the smallest maximum gap and highest digit density. This prevents false-positive combinations.
   * **Prefix Verification Filter:** Cross-references Luhn-valid digit sequences against known credit card brand standards (Visa, Mastercard, Amex, Discover, Diners Club, JCB) and common test patterns (prefixes `1`–`6`). This drops false positives from spoken prices (e.g. lists of product costs) to virtually zero.
+* **Stereo Dual-Channel Audio Support:** Designed for call center stereo recordings where the **Customer** is on the Left channel and the **Agent** is on the Right channel:
+  * **Targeted Transcription:** Automatically splits channels and transcribes **only the customer channel (Left)**, saving 50% ML compute overhead (since agents rarely read out their own PII).
+  * **Stereo-Preserving Bleeping:** Processes the channels independently and merges them back with `amerge`—meaning customer PII is bleeped on the Left while the Agent is left completely untouched, preserving pristine stereo channel separation for quality assurance (QA) audits.
+* **PCI-DSS Compliant RAM Storage (Zero-Disk Footprint):** To comply with strict PCI-DSS regulations, unredacted raw audio containing sensitive PII never touches non-volatile physical storage:
+  * **In-Memory RAM Disk:** Automatically writes all uploaded inputs, temporary split channels, and redacted outputs strictly to an in-memory virtual memory RAM disk (`/dev/shm` on Linux).
+  * **Secure Fallback:** Falls back to standard temporary storage on unsupported OSes (or local development) while keeping clean asynchronous file garbage collection active.
 * **Flexible Redaction Modes:**
   * **Default Mode (Credit Cards Only):** Optimized for PCI compliance. Only credit cards are redacted, saving significant CPU cycles by skipping advanced NLP checks for other entity types.
   * **Full Redaction Option:** Optionally redacts all available PII (Names, Phone Numbers, Emails, Social Security Numbers, IP addresses, etc.).
@@ -23,33 +29,48 @@ Redactify is a visually-silent, high-performance FastAPI application built to au
 ## Architecture Flow
 
 ```text
-  [ Upload Audio File ]
-            │
-            ▼
-┌──────────────────────────────────────┐
-│       faster-whisper (CPU int8)      │ ──► Generates word-level timestamps &
-└──────────────────────────────────────┘     constructs a mapped text string
-            │
-            ▼
-┌──────────────────────────────────────┐
-│  microsoft-presidio + en_core_web_sm │ ──► Extracts PII character ranges
-└──────────────────────────────────────┘     (Default: Credit Card only; Option: Full PII)
-            │
-            ▼
-┌──────────────────────────────────────┐
-│          Pipeline Mapping            │ ──► Maps character ranges back to
-└──────────────────────────────────────┘     exact audio word start/end timestamps
-            │
-            ▼
-┌──────────────────────────────────────┐
-│       ffmpeg complex-filtergraph     │ ──► Mutes audio and overlays a soft,
-└──────────────────────────────────────┘     gated 1000Hz sine bleep (15% volume)
-            │
-            ▼
-  [ Stream Redacted File to Client ]
-            │
-            ▼ (FastAPI Background Task)
-  [ Auto-delete Temporary Disk Files ]
+                  [ Upload Audio File ]
+                            │
+                            ▼ (Saves strictly in RAM /dev/shm)
+             [ Detect Audio Channel Count ]
+              /                          \
+       (Stereo: 2 Channels)         (Mono: 1 Channel)
+             /                            \
+┌───────────────────────────┐      ┌───────────────────────────┐
+│ Extract Left (Customer)   │      │   Transcribe Full Track   │
+│ Channel to Mono Temp WAV  │      │   (audio_path directly)   │
+└───────────────────────────┘      └───────────────────────────┘
+             │                            │
+             ▼                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  faster-whisper (CPU int8)                   │
+│   ──► Generates word-level timestamps & constructions        │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│             microsoft-presidio + en_core_web_sm              │
+│   ──► Extracts PII character ranges from customer channel    │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                       Pipeline Mapping                       │
+│   ──► Maps character ranges back to word start/end timestamps│
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  ffmpeg complex-filtergraph                  │
+│   ──► Stereo: splits FL/FR, bleeps FL, merges back via amerge│
+│   ──► Mono: standard soft gated 1000Hz sine bleep overlay     │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+            [ Stream Redacted File to Client ]
+                            │
+                            ▼ (FastAPI Background Task)
+         [ Auto-purge Virtual Files from /dev/shm ]
 ```
 
 ---
