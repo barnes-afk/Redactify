@@ -76,6 +76,51 @@ class TestFFmpegBleep(unittest.IsolatedAsyncioTestCase):
             # Cleanup
             cleanup_files(dummy_input, dummy_output)
 
+    async def test_stereo_processing(self):
+        """
+        Creates a dummy stereo WAV file and verifies the stereo channel extraction
+        and bleeping logic.
+        """
+        from audio_utils import get_audio_channels, extract_mono_channel
+        temp_dir = tempfile.gettempdir()
+        dummy_stereo = os.path.join(temp_dir, "test_dummy_stereo.wav")
+        dummy_left = os.path.join(temp_dir, "test_dummy_left.wav")
+        dummy_bleeped = os.path.join(temp_dir, "test_dummy_bleeped_stereo.wav")
+
+        # Cleanup
+        cleanup_files(dummy_stereo, dummy_left, dummy_bleeped)
+
+        try:
+            # 1. Generate a 3-second dummy stereo file (different frequencies in FL and FR)
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100",
+                "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=44100",
+                "-filter_complex", "[0:a][1:a]amerge=inputs=2", "-t", "3", "-y", dummy_stereo,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await proc.communicate()
+            self.assertTrue(os.path.exists(dummy_stereo), "Dummy stereo file should be created.")
+
+            # 2. Check channel detection
+            channels = await get_audio_channels(dummy_stereo)
+            self.assertEqual(channels, 2)
+
+            # 3. Extract Front Left (FL) channel
+            await extract_mono_channel(dummy_stereo, dummy_left, "left")
+            self.assertTrue(os.path.exists(dummy_left), "Extracted left channel file should be created.")
+            left_channels = await get_audio_channels(dummy_left)
+            self.assertEqual(left_channels, 1)
+
+            # 4. Bleep the stereo file
+            await bleep_audio(dummy_stereo, dummy_bleeped, [(1.0, 2.0)])
+            self.assertTrue(os.path.exists(dummy_bleeped), "Bleeped stereo file should be created.")
+            bleeped_channels = await get_audio_channels(dummy_bleeped)
+            self.assertEqual(bleeped_channels, 2)
+
+        finally:
+            cleanup_files(dummy_stereo, dummy_left, dummy_bleeped)
+
 
 class TestPipelineMapping(unittest.IsolatedAsyncioTestCase):
     @patch("pipeline.get_whisper_model")

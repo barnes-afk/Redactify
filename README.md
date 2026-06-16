@@ -171,7 +171,7 @@ To run the complete suite of unit tests, integration tests, and actual FFmpeg bl
 python3 test_app.py
 ```
 
-The test runner will run **23 comprehensive tests** validating:
+The test runner will run **24 comprehensive tests** validating:
 * Interval merging mathematical logic.
 * Actual FFmpeg filtergraph execution on real temporary audio files.
 * Character range mapping back to audio timestamps.

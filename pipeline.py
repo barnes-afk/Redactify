@@ -1,8 +1,12 @@
 import asyncio
 import logging
+import os
+import tempfile
+import uuid
 from typing import List, Tuple
 from faster_whisper import WhisperModel
 from config import WHISPER_MODEL_SIZE, WHISPER_DEVICE, WHISPER_COMPUTE_TYPE, analyzer_engine
+from audio_utils import get_audio_channels, extract_mono_channel
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +58,34 @@ async def run_redaction_pipeline(audio_path: str, full_redact: bool = False) -> 
     3. Maps character indices back to exact audio timestamps.
     Returns a list of (start_time, end_time) tuples representing the bleep intervals.
     """
-    logger.info(f"Starting transcription for {audio_path}...")
+    channels = await get_audio_channels(audio_path)
+    temp_left_path = None
+    transcribe_path = audio_path
+
+    if channels == 2:
+        logger.info("Stereo file detected. Extracting Left (Customer) channel for transcription...")
+        temp_dir = tempfile.gettempdir()
+        temp_left_path = os.path.join(temp_dir, f"temp_left_{uuid.uuid4()}.wav")
+        try:
+            await extract_mono_channel(audio_path, temp_left_path, "left")
+            transcribe_path = temp_left_path
+        except Exception as e:
+            logger.error(f"Failed to extract Left channel from stereo audio: {e}")
+            raise RuntimeError(f"Stereo channel extraction failed: {e}")
+
+    logger.info(f"Starting transcription for {transcribe_path}...")
     try:
-        segments, info = await asyncio.to_thread(_transcribe_blocking, audio_path)
+        segments, info = await asyncio.to_thread(_transcribe_blocking, transcribe_path)
     except Exception as e:
         logger.error(f"Error during Whisper transcription: {e}")
         raise RuntimeError(f"Transcription failed: {e}")
+    finally:
+        if temp_left_path and os.path.exists(temp_left_path):
+            try:
+                os.remove(temp_left_path)
+                logger.info(f"Successfully deleted temporary Left channel file: {temp_left_path}")
+            except Exception as e:
+                logger.error(f"Failed to delete temporary Left channel file {temp_left_path}: {e}")
 
     # Build full text and map character indices to word timestamps
     full_text = ""
