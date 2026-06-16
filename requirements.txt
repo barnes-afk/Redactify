@@ -4,3 +4,5 @@ python-multipart
 faster-whisper
 presidio-analyzer
 presidio-anonymizer
+click>=8.4.1
+typer==0.25.1

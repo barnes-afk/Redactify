@@ -42,6 +42,103 @@ def is_luhn_valid(number_str: str) -> bool:
         total_sum += (double_d - 9) if double_d > 9 else double_d
     return (total_sum % 10) == 0
 
+def is_valid_cc_prefix(number_str: str) -> bool:
+    """
+    Validates if a credit card digit sequence has a valid prefix and length.
+    Allows standard major card brands (Visa, Mastercard, Amex, Discover, Diners, JCB)
+    as well as common industry test card patterns (starting with 1).
+    """
+    length = len(number_str)
+    if not (13 <= length <= 19):
+        return False
+        
+    # Standard credit card prefixes (including 1 for common test/mock card patterns):
+    # 1: Industry test/mock cards (e.g. 1234...)
+    # 2: Mastercard
+    # 3: American Express, Diners Club, JCB
+    # 4: Visa
+    # 5: Mastercard
+    # 6: Discover
+    return number_str[0] in ("1", "2", "3", "4", "5", "6")
+
+def find_luhn_subsequences(digit_items, max_gap=15):
+    """
+    Finds subsequences of digit items that combine to form a Luhn-valid number.
+    Uses backtracking with early pruning since items are sorted by token_idx and
+    credit card numbers must be between 13 and 19 digits.
+    """
+    results = []
+    n = len(digit_items)
+    
+    def backtrack(idx, current_subsequence, current_length):
+        if 13 <= current_length <= 19:
+            combined = "".join(item["digit_str"] for item in current_subsequence)
+            if is_luhn_valid(combined) and is_valid_cc_prefix(combined):
+                results.append(list(current_subsequence))
+        
+        if current_length > 19:
+            return
+            
+        last_item = current_subsequence[-1]
+        for next_idx in range(idx + 1, n):
+            next_item = digit_items[next_idx]
+            gap = next_item["token_idx"] - last_item["token_idx"] - 1
+            if gap <= max_gap:
+                current_subsequence.append(next_item)
+                backtrack(next_idx, current_subsequence, current_length + len(next_item["digit_str"]))
+                current_subsequence.pop()
+            else:
+                # Since digit_items is sorted by token_idx, subsequent items will have even larger gaps
+                break
+
+    for i in range(n):
+        backtrack(i, [digit_items[i]], len(digit_items[i]["digit_str"]))
+        
+    return results
+
+def resolve_overlapping_sequences(sequences):
+    """
+    Given a list of sequences, sorts them by quality (smaller max_gap is better,
+    larger digit_count is better) and greedily selects non-overlapping sequences.
+    """
+    seq_with_features = []
+    for seq in sequences:
+        start = seq[0]["start"]
+        end = seq[-1]["end"]
+        
+        # Calculate max gap between adjacent items in this sequence
+        max_gap = 0
+        for i in range(len(seq) - 1):
+            gap = seq[i+1]["token_idx"] - seq[i]["token_idx"] - 1
+            if gap > max_gap:
+                max_gap = gap
+                
+        digit_count = sum(len(item["digit_str"]) for item in seq)
+        
+        seq_with_features.append({
+            "seq": seq,
+            "start": start,
+            "end": end,
+            "max_gap": max_gap,
+            "digit_count": digit_count
+        })
+        
+    # Sort by quality: max_gap ascending, then digit_count descending
+    seq_with_features.sort(key=lambda x: (x["max_gap"], -x["digit_count"]))
+    
+    # Greedily select non-overlapping sequences
+    selected = []
+    for item in seq_with_features:
+        overlap = False
+        for sel in selected:
+            if not (item["end"] <= sel["start"] or item["start"] >= sel["end"]):
+                overlap = True
+                break
+        if not overlap:
+            selected.append(item)
+            
+    return selected
+
 SINGLE_DIGIT_WORDS = {
     "zero": "0", "oh": "0", "nought": "0", "nil": "0", "none": "0",
     "one": "1",
@@ -205,62 +302,17 @@ class LuhnCreditCardRecognizer(EntityRecognizer):
                 
             i += 1
 
-        # 3. Group digit items that are "close" to each other
-        MAX_GAP_TOKENS = 3
-        candidate_groups = []
-        current_group = []
-        
-        for item in digit_items:
-            if not current_group:
-                current_group.append(item)
-            else:
-                last_item = current_group[-1]
-                gap = item["token_idx"] - last_item["token_idx"] - 1
-                if gap <= MAX_GAP_TOKENS:
-                    current_group.append(item)
-                else:
-                    candidate_groups.append(current_group)
-                    current_group = [item]
-        if current_group:
-            candidate_groups.append(current_group)
+        # 3. Find subsequences of digit items that form Luhn-valid card numbers
+        all_sequences = find_luhn_subsequences(digit_items, max_gap=15)
+        resolved_items = resolve_overlapping_sequences(all_sequences)
 
-        # 4. Find all Luhn-valid sub-segments within each group
-        detected_ranges = []
-        for group in candidate_groups:
-            # We look at all possible sub-segments of this group
-            for start_idx in range(len(group)):
-                for end_idx in range(start_idx + 1, len(group) + 1):
-                    sub_items = group[start_idx:end_idx]
-                    combined = "".join(item["digit_str"] for item in sub_items)
-                    if 13 <= len(combined) <= 19:
-                        if is_luhn_valid(combined):
-                            detected_ranges.append({
-                                "start": sub_items[0]["start"],
-                                "end": sub_items[-1]["end"]
-                            })
-
-        # 5. Merge any overlapping or adjacent detected character ranges
-        if not detected_ranges:
-            return results
-
-        sorted_ranges = sorted(detected_ranges, key=lambda r: r["start"])
-        merged_ranges = []
-        curr = sorted_ranges[0]
-        for nxt in sorted_ranges[1:]:
-            if nxt["start"] <= curr["end"]:
-                curr["end"] = max(curr["end"], nxt["end"])
-            else:
-                merged_ranges.append(curr)
-                curr = nxt
-        merged_ranges.append(curr)
-
-        # 6. Convert merged ranges to Presidio RecognizerResult objects
-        for r in merged_ranges:
+        # 6. Convert resolved items to Presidio RecognizerResult objects
+        for item in resolved_items:
             results.append(
                 RecognizerResult(
                     entity_type="CREDIT_CARD",
-                    start=r["start"],
-                    end=r["end"],
+                    start=item["start"],
+                    end=item["end"],
                     score=0.95
                 )
             )

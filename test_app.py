@@ -331,6 +331,71 @@ class TestLuhnRecognizer(unittest.TestCase):
         self.assertTrue(matched_text.startswith("forty"))
         self.assertTrue(matched_text.endswith("eleven"))
 
+    def test_luhn_recognizer_interrupted_with_words(self):
+        from config import LuhnCreditCardRecognizer
+        recognizer = LuhnCreditCardRecognizer()
+
+        # The user's exact failing scenario with conversational interruption and "four" count word
+        text = (
+            "My visa card? Yeah, it's four transfers of four. So, 1234, then 5678. "
+            "Hold on. Let me look at it. Okay, 912. And the last four digits are 3456."
+        )
+        results = recognizer.analyze(text, entities=["CREDIT_CARD"])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].entity_type, "CREDIT_CARD")
+        matched_text = text[results[0].start:results[0].end]
+        self.assertTrue(matched_text.startswith("four"))
+        self.assertTrue(matched_text.endswith("3456"))
+
+    def test_conversational_variations(self):
+        from config import LuhnCreditCardRecognizer
+        recognizer = LuhnCreditCardRecognizer()
+        
+        scenarios = [
+            # Scenario A: Spelling digits one-by-one with pauses & filler word "oh" (0)
+            {
+                "text": "My card is four, oh, two, zero, zero, one, one, two, two, two, zero, three, three, zero, eight.",
+                "expected_count": 1,
+                "desc": "Single digit spelling with 'oh' representing '0'"
+            },
+            # Scenario B: Large conversational interruption with multipliers
+            {
+                "text": "The Visa is four four four four. Yeah, hold on, someone is at the door. Okay, back. Then it's three three three three, double two double two, and double one double one.",
+                "expected_count": 1,
+                "desc": "Conversational interruption with multipliers"
+            },
+            # Scenario C: Phonetic homophones (to -> 2, for -> 4, ate -> 8)
+            {
+                "text": "Card is for, for, for, for, three, three, three, three, to, to, to, to, one, one, one, one.",
+                "expected_count": 1,
+                "desc": "Phonetic homophones transcribed by Whisper"
+            },
+            # Scenario D: Natural grouped readings (tens + single digits)
+            {
+                "text": "The account is thirty-seven eighty-two, zero-eleven, twenty-two, twenty, thirty-three, zero-eight.",
+                "expected_count": 1,
+                "desc": "Grouped tens and teens Amex card reading"
+            }
+        ]
+        
+        for s in scenarios:
+            with self.subTest(desc=s["desc"]):
+                results = recognizer.analyze(s["text"], entities=["CREDIT_CARD"])
+                self.assertEqual(len(results), s["expected_count"])
+
+    def test_luhn_recognizer_price_discussions_prevented(self):
+        from config import LuhnCreditCardRecognizer
+        recognizer = LuhnCreditCardRecognizer()
+
+        # A sequence of prices representing "7000000000000005" which is Luhn-valid but starts with '7'
+        text = (
+            "Okay, the first quote is seventy dollars, then zero, zero, zero, zero, "
+            "zero, zero, zero, zero, zero, zero, zero, zero, zero, zero, and the last is five."
+        )
+        results = recognizer.analyze(text, entities=["CREDIT_CARD"])
+        # Should not be redacted because it starts with '7' (which is not a valid credit card brand prefix)
+        self.assertEqual(len(results), 0)
+
 
 class TestWhisperConfiguration(unittest.TestCase):
     @patch("pipeline.WhisperModel")

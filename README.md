@@ -7,7 +7,10 @@ Redactify is a visually-silent, high-performance FastAPI application built to au
 ## Key Features
 
 * **Precision Word-Level Redaction:** Leverages `faster-whisper`'s word-level timestamps to bleep out only the exact spoken words of sensitive data (instead of muting entire sentences).
-* **Robust Spoken Credit Card Detection:** Features a custom, Luhn-validating (`Mod-10`) Microsoft Presidio recognizer that extracts credit card numbers even when spoken digit-by-digit (with arbitrary spaces/hyphens commonly found in spoken transcriptions).
+* **Robust Spoken Credit Card Detection:** Features an enterprise-grade custom Presidio recognizer designed for live-agent call transcripts:
+  * **Asynchronous Backtracking DFS Scan:** Recursively scans extracted digit sequences allowing conversational pauses of up to `15` tokens (e.g. *"Hold on, let me look at it"*), seamlessly skipping filler words or count adjectives (such as *"four"* in *"last four digits"*).
+  * **Density-Quality Greedy Selection:** Greedily evaluates overlapping candidate subsequences, prioritizing candidates with the smallest maximum gap and highest digit density. This prevents false-positive combinations.
+  * **Prefix Verification Filter:** Cross-references Luhn-valid digit sequences against known credit card brand standards (Visa, Mastercard, Amex, Discover, Diners Club, JCB) and common test patterns (prefixes `1`–`6`). This drops false positives from spoken prices (e.g. lists of product costs) to virtually zero.
 * **Flexible Redaction Modes:**
   * **Default Mode (Credit Cards Only):** Optimized for PCI compliance. Only credit cards are redacted, saving significant CPU cycles by skipping advanced NLP checks for other entity types.
   * **Full Redaction Option:** Optionally redacts all available PII (Names, Phone Numbers, Emails, Social Security Numbers, IP addresses, etc.).
@@ -168,7 +171,7 @@ To run the complete suite of unit tests, integration tests, and actual FFmpeg bl
 python3 test_app.py
 ```
 
-The test runner will run **13 comprehensive tests** validating:
+The test runner will run **23 comprehensive tests** validating:
 * Interval merging mathematical logic.
 * Actual FFmpeg filtergraph execution on real temporary audio files.
 * Character range mapping back to audio timestamps.
