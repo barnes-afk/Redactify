@@ -23,6 +23,10 @@ Redactify is a visually-silent, high-performance FastAPI application built to au
 * **Non-Blocking Architecture:** Fully asynchronous operations—FFmpeg processes and CPU-bound ML steps are offloaded to native subprocesses and background threads to keep the event loop highly responsive.
 * **Pleasant Acoustic Redaction:** Rather than generating peak digital square waves that can hurt a listener's ears, Redactify mutes the original signal and overlays a soft, comfortable `1000Hz` sine wave tone at `15%` amplitude.
 * **Auto-Cleanup Temporary Files:** Integrated FastAPI `BackgroundTasks` ensure that temporary files (uploaded inputs and redacted outputs) are securely deleted from disk immediately after being streamed back to the client.
+* **Structured Chat Transcript & JSON Redaction:** Supports both plain text (`.txt`) and structured chat transcripts (`.json`) with intelligent formatting:
+  * **Surgical Field-Level JSON Redaction**: If JSON structure is detected, it automatically parses it. For standard conversational JSON files (containing `"entries"` arrays), it selectively redacts *only* the dialogue `"text"` fields. All structural metadata, including timestamps, IDs, and roles, are preserved perfectly.
+  * **Generic JSON Traversal**: For any other arbitrary JSON formats, it recursively parses and redacts *all* string values in-place while keeping keys and document hierarchies intact.
+  * **Raw Text Support**: For standard `.txt` files, it sanitizes full-text documents and returns the cleaned file.
 
 ---
 
@@ -183,6 +187,32 @@ curl -X POST -F "file=@/home/developer/Downloads/recording.mp3" http://localhost
 curl -X POST -F "file=@/home/developer/Downloads/recording.mp3" "http://localhost:8000/redact-audio?full_redact=true" --output redacted_recording.mp3
 ```
 
+### 3. Redact Text/JSON (POST `/redact-text`)
+Accepts a plain text file (`.txt`) or structured JSON file (`.json`) containing call/chat transcripts, sanitizes it, and returns the redacted file of the identical type.
+
+* **URL:** `/redact-text`
+* **Method:** `POST`
+* **Parameters:**
+  * `file` (Multipart file upload): The text or JSON file to sanitize.
+  * `full_redact` (Boolean Query Parameter, Optional):
+    * `false` (default): Only redacts **Credit Card Numbers** (highly optimized).
+    * `true`: Redacts **all** PII entities (Names, Phone Numbers, Emails, SSNs, etc.).
+
+#### Features:
+* **Surgical JSON Handling**: If a JSON file containing a conversational `"entries"` structure is uploaded, Redactify surgically redacts *only* the `"text"` fields inside each entry. Timestamps, user IDs, and role labels remain fully untouched to prevent breaking downstream integrations.
+* **Generic JSON Fallback**: For other JSON schemas, it recursively redacts *all* string values in-place.
+* **Plain Text Support**: For plain `.txt` files, the entire text document is redacted.
+
+#### Example A: Redact Only Credit Cards in Conversational JSON
+```bash
+curl -X POST -F "file=@chat_transcript.json" http://localhost:8000/redact-text --output redacted_transcript.json
+```
+
+#### Example B: Redact All PII in Raw Text File
+```bash
+curl -X POST -F "file=@transcript.txt" "http://localhost:8000/redact-text?full_redact=true" --output redacted_transcript.txt
+```
+
 ---
 
 ## Running Automated Tests
@@ -192,9 +222,9 @@ To run the complete suite of unit tests, integration tests, and actual FFmpeg bl
 python3 test_app.py
 ```
 
-The test runner will run **24 comprehensive tests** validating:
+The test runner will run **29 comprehensive tests** validating:
 * Interval merging mathematical logic.
 * Actual FFmpeg filtergraph execution on real temporary audio files.
 * Character range mapping back to audio timestamps.
 * Custom `LuhnCreditCardRecognizer` regex extraction for spoken credit card digits.
-* API endpoints (`/health` and mock file uploads/cleanups).
+* API endpoints (`/health`, `/redact-audio`, `/redact-text` text/JSON uploads, and mock file cleanups).

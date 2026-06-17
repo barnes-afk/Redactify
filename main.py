@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -137,6 +138,58 @@ async def redact_audio_endpoint(
         cleanup_files(input_file_path, output_file_path)
         raise HTTPException(status_code=500, detail=f"Redaction process failed: {str(e)}")
 
+async def redact_single_text(text: str, full_redact: bool) -> str:
+    """
+    Helper to run Presidio Analyzer and Anonymizer on a single block of text.
+    """
+    if not text.strip():
+        return text
+    entities = None if full_redact else ["CREDIT_CARD"]
+    results = await asyncio.to_thread(
+        analyzer_engine.analyze,
+        text=text,
+        language="en",
+        entities=entities
+    )
+    anonymized_result = await asyncio.to_thread(
+        anonymizer_engine.anonymize,
+        text=text,
+        analyzer_results=results
+    )
+    return anonymized_result.text
+
+async def redact_json_inplace(data, full_redact: bool) -> None:
+    """
+    Recursively redact string values within a JSON object in-place.
+    Surgically redacts only conversation entry "text" fields if it matches the conversational schema.
+    """
+    if isinstance(data, dict):
+        # Specific check for conversational entries transcript schema
+        if "entries" in data and isinstance(data["entries"], list):
+            is_conversation = all(
+                isinstance(entry, dict) and "text" in entry
+                for entry in data["entries"] if isinstance(entry, dict)
+            )
+            if is_conversation:
+                for entry in data["entries"]:
+                    if isinstance(entry, dict) and isinstance(entry.get("text"), str):
+                        entry["text"] = await redact_single_text(entry["text"], full_redact)
+                return
+
+        # Generic recursive dict traversal
+        for key, value in data.items():
+            if isinstance(value, str):
+                data[key] = await redact_single_text(value, full_redact)
+            elif isinstance(value, (dict, list)):
+                await redact_json_inplace(value, full_redact)
+                
+    elif isinstance(data, list):
+        for idx, item in enumerate(data):
+            if isinstance(item, str):
+                data[idx] = await redact_single_text(item, full_redact)
+            elif isinstance(item, (dict, list)):
+                await redact_json_inplace(item, full_redact)
+
 @app.post("/redact-text")
 async def redact_text_endpoint(
     background_tasks: BackgroundTasks,
@@ -144,8 +197,9 @@ async def redact_text_endpoint(
     full_redact: bool = False
 ):
     """
-    POST endpoint that accepts a text file (e.g. conversation transcript),
-    detects PII, anonymizes it, and returns the redacted text file.
+    POST endpoint that accepts a text or JSON file (e.g. conversational transcript),
+    detects PII, anonymizes it (surgically on field-level for conversational JSON),
+    and returns the redacted file of the same type.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Uploaded file must have a filename.")
@@ -154,15 +208,15 @@ async def redact_text_endpoint(
     if not ext:
         ext = ".txt"  # Default fallback if no extension is provided
         
-    logger.info(f"Received text file upload (extension: '{ext}'). Processing in-memory...")
+    logger.info(f"Received file upload (extension: '{ext}'). Processing in-memory...")
     
     try:
         # Read the uploaded file's content as text
         contents = await file.read()
         text_content = contents.decode("utf-8", errors="replace")
     except Exception as e:
-        logger.error(f"Failed to read uploaded text file: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to read uploaded text file: {str(e)}")
+        logger.error(f"Failed to read uploaded file: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {str(e)}")
     finally:
         await file.close()
         
@@ -173,27 +227,26 @@ async def redact_text_endpoint(
     background_tasks.add_task(cleanup_files, output_file_path)
     
     try:
-        # Run Presidio Analyzer (offloaded to thread pool to keep the event loop responsive)
-        entities = None if full_redact else ["CREDIT_CARD"]
-        logger.info(f"Running Presidio Analyzer (full_redact={full_redact}) on text file...")
-        results = await asyncio.to_thread(
-            analyzer_engine.analyze,
-            text=text_content,
-            language="en",
-            entities=entities
-        )
-        
-        # Anonymize PII using Presidio Anonymizer
-        logger.info("Anonymizing identified PII in text content...")
-        anonymized_result = await asyncio.to_thread(
-            anonymizer_engine.anonymize,
-            text=text_content,
-            analyzer_results=results
-        )
-        redacted_text = anonymized_result.text
-        
+        # Attempt to parse as JSON to support Approach A (Field-Level JSON Redaction)
+        is_json = False
+        try:
+            json_data = json.loads(text_content)
+            is_json = True
+        except json.JSONDecodeError:
+            pass
+            
+        if is_json:
+            logger.info("JSON file structure detected. Performing surgical field-level redaction...")
+            await redact_json_inplace(json_data, full_redact)
+            redacted_text = json.dumps(json_data, indent=2)
+            media_type = "application/json"
+        else:
+            logger.info("Raw text structure detected. Performing full text redaction...")
+            redacted_text = await redact_single_text(text_content, full_redact)
+            media_type = "text/plain"
+            
         # Write redacted text to the output file
-        logger.info(f"Writing redacted text to {output_file_path}...")
+        logger.info(f"Writing redacted content to {output_file_path}...")
         with open(output_file_path, "w", encoding="utf-8") as f:
             f.write(redacted_text)
             
@@ -201,7 +254,7 @@ async def redact_text_endpoint(
         
         return FileResponse(
             path=output_file_path,
-            media_type="text/plain",
+            media_type=media_type,
             filename=f"redacted_{file.filename}"
         )
         
@@ -209,4 +262,4 @@ async def redact_text_endpoint(
         logger.error(f"Redaction process failed: {e}")
         # Clean up files immediately on failure as response is aborted
         cleanup_files(output_file_path)
-        raise HTTPException(status_code=500, detail=f"Text redaction process failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Redaction process failed: {str(e)}")

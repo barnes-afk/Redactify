@@ -344,6 +344,83 @@ class TestFastAPIEndpoints(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertIn("Expected UploadFile", response.json()["detail"][0]["msg"])
 
+    def test_redact_text_endpoint_success_conversational_json_default(self):
+        json_content = {
+            "conversation_info": {
+                "categories": [{"display_name": "CHAT TRANSCRIPT"}]
+            },
+            "entries": [
+                {
+                    "start_timestamp_usec": 1778523841000000,
+                    "text": "Hello, my card is 4444 3333 2222 1111",
+                    "role": "AUTOMATED_AGENT",
+                    "user_id": 1
+                },
+                {
+                    "start_timestamp_usec": 1778524039000000,
+                    "text": "Hello John, call me at 555-555-0199",
+                    "role": "END_USER",
+                    "user_id": 3
+                }
+            ]
+        }
+        import json
+        payload = json.dumps(json_content).encode("utf-8")
+        
+        response = self.client.post(
+            "/redact-text",
+            files={"file": ("transcript.json", payload, "application/json")}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "application/json")
+        
+        redacted_data = response.json()
+        
+        # Verify JSON structure is identical
+        self.assertEqual(redacted_data["conversation_info"]["categories"][0]["display_name"], "CHAT TRANSCRIPT")
+        self.assertEqual(redacted_data["entries"][0]["start_timestamp_usec"], 1778523841000000)
+        self.assertEqual(redacted_data["entries"][0]["role"], "AUTOMATED_AGENT")
+        self.assertEqual(redacted_data["entries"][0]["user_id"], 1)
+        
+        # Verify default CC redaction worked
+        self.assertEqual(redacted_data["entries"][0]["text"], "Hello, my card is <CREDIT_CARD>")
+        
+        # Verify name and phone were NOT redacted by default
+        self.assertIn("John", redacted_data["entries"][1]["text"])
+        self.assertIn("555-555-0199", redacted_data["entries"][1]["text"])
+
+    def test_redact_text_endpoint_success_conversational_json_full_redact(self):
+        json_content = {
+            "conversation_info": {
+                "categories": [{"display_name": "CHAT TRANSCRIPT"}]
+            },
+            "entries": [
+                {
+                    "start_timestamp_usec": 1778523841000000,
+                    "text": "Hello John, call me at 555-555-0199",
+                    "role": "END_USER",
+                    "user_id": 3
+                }
+            ]
+        }
+        import json
+        payload = json.dumps(json_content).encode("utf-8")
+        
+        response = self.client.post(
+            "/redact-text?full_redact=true",
+            files={"file": ("transcript.json", payload, "application/json")}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "application/json")
+        
+        redacted_data = response.json()
+        
+        # Verify full redaction worked
+        self.assertNotIn("John", redacted_data["entries"][0]["text"])
+        self.assertNotIn("555-555-0199", redacted_data["entries"][0]["text"])
+        self.assertIn("<PERSON>", redacted_data["entries"][0]["text"])
+        self.assertIn("<PHONE_NUMBER>", redacted_data["entries"][0]["text"])
+
 
 class TestLuhnRecognizer(unittest.TestCase):
     def test_luhn_validation(self):
