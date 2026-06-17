@@ -80,7 +80,7 @@ async def redact_audio_endpoint(
     input_file_path = os.path.join(temp_dir, f"input_{uuid.uuid4()}{ext}")
     output_file_path = os.path.join(temp_dir, f"redacted_{uuid.uuid4()}{ext}")
     
-    logger.info(f"Received file upload: '{file.filename}'. Saving temporarily to {input_file_path}")
+    logger.info(f"Received file upload (extension: '{ext}'). Saving temporarily to {input_file_path}")
     
     # Save the uploaded file to disk asynchronously
     try:

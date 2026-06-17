@@ -69,7 +69,7 @@ async def extract_mono_channel(
         "-y", output_path
     ]
     
-    logger.info(f"Extracting {channel} channel with args: {args}")
+    logger.info(f"Extracting Front {channel.capitalize()} channel from stereo file...")
     process = await asyncio.create_subprocess_exec(
         "ffmpeg",
         *args,
@@ -137,7 +137,7 @@ async def bleep_audio(
             "-y", output_path
         ]
         
-    logger.info(f"Running ffmpeg with args: {args}")
+    logger.info("Running FFmpeg to apply audio bleeps...")
     
     process = await asyncio.create_subprocess_exec(
         "ffmpeg",

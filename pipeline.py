@@ -122,7 +122,7 @@ async def run_redaction_pipeline(audio_path: str, full_redact: bool = False) -> 
             })
 
     cleaned_text = full_text.strip()
-    logger.info(f"Transcribed Text: '{cleaned_text}'")
+    logger.info(f"Transcription completed successfully. Total characters: {len(cleaned_text)}.")
     
     if not cleaned_text:
         logger.info("Transcription is empty. No PII detection needed.")
