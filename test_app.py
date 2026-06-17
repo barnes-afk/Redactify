@@ -303,6 +303,47 @@ class TestFastAPIEndpoints(unittest.TestCase):
         finally:
             cleanup_files(dummy_upload_file)
 
+    def test_redact_text_endpoint_success_credit_card(self):
+        # Default: redact only CREDIT_CARD
+        text_content = b"Agent: Hello, how can I help you?\nCustomer: Yes, my card number is 4444 3333 2222 1111."
+        response = self.client.post(
+            "/redact-text",
+            files={"file": ("transcript.txt", text_content, "text/plain")}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "text/plain; charset=utf-8")
+        self.assertTrue(response.headers["content-disposition"].startswith("attachment; filename="))
+        
+        redacted_body = response.content.decode("utf-8")
+        self.assertIn("Customer: Yes, my card number is <CREDIT_CARD>.", redacted_body)
+        self.assertNotIn("4444 3333 2222 1111", redacted_body)
+
+    def test_redact_text_endpoint_success_full_redact(self):
+        # full_redact=True: redacts other PII like phone numbers and names
+        text_content = b"Agent: Hi John, is 555-555-0199 your number?\nCustomer: Yes it is."
+        response = self.client.post(
+            "/redact-text?full_redact=true",
+            files={"file": ("transcript.txt", text_content, "text/plain")}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "text/plain; charset=utf-8")
+        
+        redacted_body = response.content.decode("utf-8")
+        # Ensure name and phone are redacted
+        self.assertNotIn("John", redacted_body)
+        self.assertNotIn("555-555-0199", redacted_body)
+        # Verify placeholders exist (either <PERSON> or <PHONE_NUMBER>)
+        self.assertTrue("<PERSON>" in redacted_body)
+        self.assertTrue("<PHONE_NUMBER>" in redacted_body)
+
+    def test_redact_text_endpoint_missing_filename(self):
+        response = self.client.post(
+            "/redact-text",
+            files={"file": ("", b"some text content", "text/plain")}
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Expected UploadFile", response.json()["detail"][0]["msg"])
+
 
 class TestLuhnRecognizer(unittest.TestCase):
     def test_luhn_validation(self):

@@ -9,7 +9,8 @@ from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from pipeline import run_redaction_pipeline, get_whisper_model
 from audio_utils import bleep_audio
-from config import get_secure_temp_dir
+from config import get_secure_temp_dir, analyzer_engine
+from presidio_anonymizer import AnonymizerEngine
 
 # Setup logging
 logging.basicConfig(
@@ -17,6 +18,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Initialize AnonymizerEngine singleton
+anonymizer_engine = AnonymizerEngine()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -132,3 +136,77 @@ async def redact_audio_endpoint(
         # Clean up files immediately on failure as response is aborted
         cleanup_files(input_file_path, output_file_path)
         raise HTTPException(status_code=500, detail=f"Redaction process failed: {str(e)}")
+
+@app.post("/redact-text")
+async def redact_text_endpoint(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    full_redact: bool = False
+):
+    """
+    POST endpoint that accepts a text file (e.g. conversation transcript),
+    detects PII, anonymizes it, and returns the redacted text file.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Uploaded file must have a filename.")
+        
+    ext = os.path.splitext(file.filename)[1]
+    if not ext:
+        ext = ".txt"  # Default fallback if no extension is provided
+        
+    logger.info(f"Received text file upload (extension: '{ext}'). Processing in-memory...")
+    
+    try:
+        # Read the uploaded file's content as text
+        contents = await file.read()
+        text_content = contents.decode("utf-8", errors="replace")
+    except Exception as e:
+        logger.error(f"Failed to read uploaded text file: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to read uploaded text file: {str(e)}")
+    finally:
+        await file.close()
+        
+    temp_dir = get_secure_temp_dir()
+    output_file_path = os.path.join(temp_dir, f"redacted_{uuid.uuid4()}{ext}")
+    
+    # Schedule file cleanup to run after response is sent
+    background_tasks.add_task(cleanup_files, output_file_path)
+    
+    try:
+        # Run Presidio Analyzer (offloaded to thread pool to keep the event loop responsive)
+        entities = None if full_redact else ["CREDIT_CARD"]
+        logger.info(f"Running Presidio Analyzer (full_redact={full_redact}) on text file...")
+        results = await asyncio.to_thread(
+            analyzer_engine.analyze,
+            text=text_content,
+            language="en",
+            entities=entities
+        )
+        
+        # Anonymize PII using Presidio Anonymizer
+        logger.info("Anonymizing identified PII in text content...")
+        anonymized_result = await asyncio.to_thread(
+            anonymizer_engine.anonymize,
+            text=text_content,
+            analyzer_results=results
+        )
+        redacted_text = anonymized_result.text
+        
+        # Write redacted text to the output file
+        logger.info(f"Writing redacted text to {output_file_path}...")
+        with open(output_file_path, "w", encoding="utf-8") as f:
+            f.write(redacted_text)
+            
+        logger.info(f"Redaction process completed. Serving file: {output_file_path}")
+        
+        return FileResponse(
+            path=output_file_path,
+            media_type="text/plain",
+            filename=f"redacted_{file.filename}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Redaction process failed: {e}")
+        # Clean up files immediately on failure as response is aborted
+        cleanup_files(output_file_path)
+        raise HTTPException(status_code=500, detail=f"Text redaction process failed: {str(e)}")
