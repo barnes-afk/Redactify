@@ -1,0 +1,65 @@
+{
+  "session": {
+    "id": "vetsource-chat-8829104",
+    "channel": "LiveAgent_Plugin",
+    "metadata": {
+      "customer_tier": "Premium",
+      "topic": "Account_Billing"
+    }
+  },
+  "participants": {
+    "agent": {
+      "id": "A-7492",
+      "name": "Jordan"
+    },
+    "customer": {
+      "id": "C-1104",
+      "verified": true
+    }
+  },
+  "messages": [
+    {
+      "index": 1,
+      "sender": "agent",
+      "text": "Hi there! Thanks for reaching out to Vetsource Support. I'm Jordan. How can I help you with your account today?",
+      "sent_at": "2026-06-16T21:51:10Z"
+    },
+    {
+      "index": 2,
+      "sender": "customer",
+      "text": "Hey Jordan, I need to update the card on file for my upcoming auto-shipments please.",
+      "sent_at": "2026-06-16T21:51:42Z"
+    },
+    {
+      "index": 3,
+      "sender": "agent",
+      "text": "I can absolutely get that updated for you. Whenever you are ready, please reply with the card number, expiration date, and the CVV code.",
+      "sent_at": "2026-06-16T21:51:58Z"
+    },
+    {
+      "index": 4,
+      "sender": "customer",
+      "text": "Sounds good. The card number is 2280853762382207. Exp is 04/30 and security code is 789.",
+      "sent_at": "2026-06-16T21:52:30Z"
+    },
+    {
+      "index": 5,
+      "sender": "agent",
+      "text": "Perfect, thank you. One moment while the system securely processes those changes... Alright, you are all set! Your payment method has been updated successfully.",
+      "sent_at": "2026-06-16T21:52:51Z"
+    },
+    {
+      "index": 6,
+      "sender": "customer",
+      "text": "Awesome, that was super easy. Thanks!",
+      "sent_at": "2026-06-16T21:53:05Z"
+    },
+    {
+      "index": 7,
+      "sender": "agent",
+      "text": "You're welcome! Feel free to reach out if you need anything else. Have a wonderful day!",
+      "sent_at": "2026-06-16T21:53:18Z"
+    }
+  ],
+  "resolution": "Payment details successfully updated dynamically via user input."
+}

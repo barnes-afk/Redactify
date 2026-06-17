@@ -1,0 +1,59 @@
+{
+  "transcript_id": "tx_987654321",
+  "channel": "Web Chat",
+  "company_name": "Vetsource Support",
+  "interaction_date": "2026-06-16",
+  "chat_history": [
+    {
+      "speaker": "Agent",
+      "timestamp": "21:42:15",
+      "message": "Welcome to Vetsource support. My name is Alex. How can I assist you with your account today?"
+    },
+    {
+      "speaker": "Customer",
+      "timestamp": "21:42:50",
+      "message": "Hi Alex, I got a notification that my monthly order failed. I need to switch to a new credit card."
+    },
+    {
+      "speaker": "Agent",
+      "timestamp": "21:43:02",
+      "message": "I'd be happy to take care of that for you. For your security, our system encrypts details automatically. Go ahead and type your new card number whenever you're ready."
+    },
+    {
+      "speaker": "Customer",
+      "timestamp": "21:43:35",
+      "message": "Okay, the number is 1309 6168 0323 5968"
+    },
+    {
+      "speaker": "Agent",
+      "timestamp": "21:43:48",
+      "message": "Got it. And what is the expiration date and the 3-digit security code on the back?"
+    },
+    {
+      "speaker": "Customer",
+      "timestamp": "21:44:10",
+      "message": "Exp is 08/29 and the code is 456"
+    },
+    {
+      "speaker": "Agent",
+      "timestamp": "21:44:25",
+      "message": "Excellent. That card has gone through successfully, and I've manually re-run the failed order for you. It's now processing!"
+    },
+    {
+      "speaker": "Customer",
+      "timestamp": "21:44:42",
+      "message": "Awesome, thanks so much for the quick help."
+    },
+    {
+      "speaker": "Agent",
+      "timestamp": "21:44:55",
+      "message": "You're very welcome! Thanks for choosing Vetsource, and have a great rest of your evening."
+    }
+  ],
+  "status": "COMPLETED",
+  "tags": [
+    "Billing",
+    "Payment Method Update",
+    "Declined Order Resolved"
+  ]
+}

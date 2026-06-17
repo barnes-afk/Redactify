@@ -1,0 +1,65 @@
+{
+  "conversation_info": {
+    "categories": [
+      {
+        "display_name": "CHAT TRANSCRIPT"
+      }
+    ]
+  },
+  "entries": [
+    {
+      "start_timestamp_usec": 1778523841000000,
+      "text": "Hello! Thanks for reaching out to Lex Corp. How can I help you today?",
+      "role": "AUTOMATED_AGENT",
+      "user_id": 1
+    },
+    {
+      "start_timestamp_usec": 1778524039000000,
+      "text": "Hi, I need to update my payment method for my dog's prescription subscription.",
+      "role": "END_USER",
+      "user_id": 3
+    },
+    {
+      "start_timestamp_usec": 1778524041000000,
+      "text": "I can certainly help you update your payment information. Please provide the 16-digit credit card number you would like to use.",
+      "role": "AUTOMATED_AGENT",
+      "user_id": 1
+    },
+    {
+      "start_timestamp_usec": 1778524052000000,
+      "text": "Sure, it is 4111 1111 1111 1111",
+      "role": "END_USER",
+      "user_id": 3
+    },
+    {
+      "start_timestamp_usec": 1778524055000000,
+      "text": "Thank you. Now, please provide the expiration date in MM/YY format, followed by the 3-digit security code (CVV).",
+      "role": "AUTOMATED_AGENT",
+      "user_id": 1
+    },
+    {
+      "start_timestamp_usec": 1778524063000000,
+      "text": "It expires 12/28 and the CVV is 123",
+      "role": "END_USER",
+      "user_id": 3
+    },
+    {
+      "start_timestamp_usec": 1778524066000000,
+      "text": "Perfect, your payment information has been successfully updated and will be applied to your upcoming shipments. Is there anything else I can assist you with today?",
+      "role": "AUTOMATED_AGENT",
+      "user_id": 1
+    },
+    {
+      "start_timestamp_usec": 1778524072000000,
+      "text": "No, that's all. Thank you!",
+      "role": "END_USER",
+      "user_id": 3
+    },
+    {
+      "start_timestamp_usec": 1778524074000000,
+      "text": "You're very welcome! Thank you for choosing Lex Corp. Have a wonderful day!",
+      "role": "AUTOMATED_AGENT",
+      "user_id": 1
+    }
+  ]
+}
