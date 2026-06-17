@@ -1,0 +1,15 @@
+services:
+  redactify:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: redactify-api
+    ports:
+      - "8000:8000"
+    environment:
+      - WHISPER_MODEL_SIZE=base
+      - WHISPER_DEVICE=cpu
+      - WHISPER_COMPUTE_TYPE=int8
+    # We allocate sufficient /dev/shm size for secure temp in-memory storage (used for PCI-DSS compliance)
+    shm_size: '256mb'
+    restart: unless-stopped
